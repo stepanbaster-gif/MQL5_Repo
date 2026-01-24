@@ -1,9 +1,10 @@
 //+------------------------------------------------------------------+
 //|                                                   TradeUtils.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                                       VERSION 4.5 (SCREENSHOTS)  |
+//|                                     VERSION 5.3 (ADD SELL)       |
 //+------------------------------------------------------------------+
 #property strict
+
 #include <Trade\Trade.mqh>
 #include <Trade\SymbolInfo.mqh>
 #include "Logger.mqh"
@@ -17,18 +18,21 @@ private:
    int               m_magic;
 
 public:
-                     CTradeUtils(void);
-                    ~CTradeUtils(void);
+                     CTradeUtils();
+                    ~CTradeUtils();
 
    void              Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logger_ptr, int magic);
 
-   bool              OpenBuy(double volume, string comment);
+   // Открытие позиций
+   bool              OpenBuy(double lot, double sl, double tp, string comment);
+   bool              OpenSell(double lot, double sl, double tp, string comment); // <--- ДОБАВЛЕНО
+   
+   // Закрытие
    void              CloseAllPositions();
-   double            CalculateSeriesProfit();
   };
 
-CTradeUtils::CTradeUtils(void) { }
-CTradeUtils::~CTradeUtils(void) { }
+CTradeUtils::CTradeUtils() : m_trade(NULL), m_symbol(NULL), m_logger(NULL), m_magic(0) {}
+CTradeUtils::~CTradeUtils() {}
 
 void CTradeUtils::Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logger_ptr, int magic)
   {
@@ -38,71 +42,48 @@ void CTradeUtils::Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logg
    m_magic = magic;
   }
 
-// --- ЗДЕСЬ ЖИВУТ СДЕЛКИ И СКРИНШОТЫ ---
-bool CTradeUtils::OpenBuy(double volume, string comment)
+// --- BUY ---
+bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
   {
-   if(CheckPointer(m_symbol) == POINTER_INVALID) return false;
-   m_symbol.RefreshRates();
+   if(m_trade == NULL || m_symbol == NULL) return false;
+   double price = m_symbol.Ask();
    
-   double ask = m_symbol.Ask();
-   double sl = 0; 
-   double tp = 0;
+   if(m_trade.Buy(lot, m_symbol.Name(), price, sl, tp, comment))
+     {
+      if(m_logger != NULL) m_logger.Log("BUY OPEN. Lot: " + DoubleToString(lot, 2) + " | " + comment);
+      ChartScreenShot(0, "Shot_BUY_"+IntegerToString((long)TimeCurrent())+".png", 1920, 1080);
+      return true;
+     }
+   if(m_logger != NULL) m_logger.Log("Order Buy Error: " + IntegerToString(GetLastError()), true);
+   return false;
+  }
 
-   bool res = m_trade.Buy(volume, m_symbol.Name(), ask, sl, tp, comment);
+// --- SELL ---
+bool CTradeUtils::OpenSell(double lot, double sl, double tp, string comment)
+  {
+   if(m_trade == NULL || m_symbol == NULL) return false;
+   double price = m_symbol.Bid(); // Продаем по Bid
    
-   if(res)
+   if(m_trade.Sell(lot, m_symbol.Name(), price, sl, tp, comment))
      {
-      string log_msg = StringFormat("ORDER OPEN: BUY Vol: %.2f Price: %.5f", volume, ask);
-      if(CheckPointer(m_logger) != POINTER_INVALID)
-         m_logger.Log(log_msg);
-      
-      // --- ВОТ ОНА, ФУНКЦИЯ СКРИНШОТА ---
-      string filename = "TradeMonster_Shot_" + IntegerToString((long)TimeCurrent()) + ".png";
-      ChartScreenShot(0, filename, 1920, 1080);
-      
-      if(CheckPointer(m_logger) != POINTER_INVALID)
-         m_logger.Log("Screenshot saved: " + filename);
+      if(m_logger != NULL) m_logger.Log("SELL OPEN. Lot: " + DoubleToString(lot, 2) + " | " + comment);
+      ChartScreenShot(0, "Shot_SELL_"+IntegerToString((long)TimeCurrent())+".png", 1920, 1080);
+      return true;
      }
-   else
-     {
-      string err = "Order Failed: " + IntegerToString(GetLastError());
-      if(CheckPointer(m_logger) != POINTER_INVALID)
-         m_logger.Log(err, true);
-     }
-   return res;
+   if(m_logger != NULL) m_logger.Log("Order Sell Error: " + IntegerToString(GetLastError()), true);
+   return false;
   }
 
 void CTradeUtils::CloseAllPositions()
   {
-   int total = PositionsTotal();
-   for(int i = total - 1; i >= 0; i--)
+   if(m_trade == NULL) return;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
-      if(ticket > 0)
+      if(ticket > 0 && PositionGetInteger(POSITION_MAGIC) == m_magic)
         {
-         if(PositionGetString(POSITION_SYMBOL) == m_symbol.Name() && PositionGetInteger(POSITION_MAGIC) == m_magic)
-           {
-            m_trade.PositionClose(ticket);
-            if(CheckPointer(m_logger) != POINTER_INVALID)
-               m_logger.Log("Hard Close: Ticket " + IntegerToString(ticket));
-           }
+         m_trade.PositionClose(ticket);
+         if(m_logger != NULL) m_logger.Log("FORCE CLOSE -> Ticket: " + IntegerToString(ticket));
         }
      }
-  }
-
-double CTradeUtils::CalculateSeriesProfit()
-  {
-   double profit = 0;
-   int total = PositionsTotal();
-   for(int i = 0; i < total; i++)
-     {
-      if(PositionGetTicket(i) > 0)
-        {
-         if(PositionGetString(POSITION_SYMBOL) == m_symbol.Name() && PositionGetInteger(POSITION_MAGIC) == m_magic)
-           {
-            profit += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-           }
-        }
-     }
-   return profit;
   }

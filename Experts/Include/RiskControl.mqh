@@ -1,117 +1,115 @@
 //+------------------------------------------------------------------+
-//|                                                  RiskControl.mqh |
+//|                                                       Logger.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                                      VERSION 4.5 (SPREAD LOGGING)|
+//|                                            VERSION 2.0 (SHARED)  |
 //+------------------------------------------------------------------+
+#property copyright "Copyright 2026, Stepan Baster"
+#property link      ""
+#property version   "2.00"
 #property strict
-#include <Trade\SymbolInfo.mqh>
-#include <Trade\AccountInfo.mqh>
-#include "Logger.mqh"
 
-class CRiskControl
+class CLogger
   {
 private:
-   CSymbolInfo      *m_symbol;
-   CLogger          *m_logger;
-   CAccountInfo      m_account;
-
-   int               m_start_hour;
-   int               m_end_hour;
-   double            m_max_spread;
-   bool              m_check_day_open;
+   string            m_symbol;
+   long              m_account;
+   string            m_filename_main;
+   string            m_filename_spread;
 
 public:
-                     CRiskControl(void);
-                    ~CRiskControl(void);
+                     CLogger(void);
+                    ~CLogger(void);
 
-   void              Init(CSymbolInfo *symbol_ptr, CLogger *logger_ptr);
-   void              SetParams(int start_h, int end_h, double max_spread, bool use_day_open);
+   // Инициализация (привязка к счету)
+   void              Init(string symbol, long account_id);
 
-   bool              CheckTime(bool &is_close_time, int close_h, int close_m);
-   bool              CheckSpread(); // <-- ЗДЕСЬ ЖИВЕТ ЛОГИКА ЗАПИСИ
-   bool              CheckDayOpen(ENUM_TIMEFRAMES timeframe);
-   bool              IsRealAccount();
+   // Основной лог (торговля и ошибки)
+   void              Log(string message, bool is_error = false);
+
+   // Лог спреда (только аномалии)
+   void              LogSpread(double spread, double threshold);
   };
 
-CRiskControl::CRiskControl(void) { }
-CRiskControl::~CRiskControl(void) { }
-
-void CRiskControl::Init(CSymbolInfo *symbol_ptr, CLogger *logger_ptr)
+//+------------------------------------------------------------------+
+//| Constructor                                                      |
+//+------------------------------------------------------------------+
+CLogger::CLogger(void)
   {
-   m_symbol = symbol_ptr;
-   m_logger = logger_ptr;
+   m_symbol = "";
+   m_account = 0;
+   m_filename_main = "";
+   m_filename_spread = "";
   }
 
-void CRiskControl::SetParams(int start_h, int end_h, double max_spread, bool use_day_open)
+//+------------------------------------------------------------------+
+//| Destructor                                                       |
+//+------------------------------------------------------------------+
+CLogger::~CLogger(void)
   {
-   m_start_hour = start_h;
-   m_end_hour = end_h;
-   m_max_spread = max_spread;
-   m_check_day_open = use_day_open;
   }
 
-bool CRiskControl::IsRealAccount()
+//+------------------------------------------------------------------+
+//| Initialization                                                   |
+//+------------------------------------------------------------------+
+void CLogger::Init(string symbol, long account_id)
   {
-   if(m_account.TradeMode() == ACCOUNT_TRADE_MODE_REAL)
-     {
-      Print("CRITICAL: REAL ACCOUNT DETECTED.");
-      if(CheckPointer(m_logger) != POINTER_INVALID)
-         m_logger.Log("CRITICAL: REAL ACCOUNT BLOCK ACTIVATED", true);
-      return true; 
-     }
-   return false;
-  }
-
-// --- ВОТ ЭТА ФУНКЦИЯ ПИШЕТ СПРЕД ---
-bool CRiskControl::CheckSpread()
-  {
-   if(CheckPointer(m_symbol) == POINTER_INVALID) return false;
+   m_symbol = symbol;
+   m_account = account_id;
    
-   m_symbol.RefreshRates();
-   double spread_points = m_symbol.Spread(); 
+   // Формируем имена файлов с ID счета, чтобы не путать демо и реал
+   m_filename_main = "TradeMonster_Log_" + IntegerToString(account_id) + ".csv";
+   m_filename_spread = "Spread_Monitor_" + IntegerToString(account_id) + ".csv";
+  }
+
+//+------------------------------------------------------------------+
+//| Main Log Function                                                |
+//+------------------------------------------------------------------+
+void CLogger::Log(string message, bool is_error = false)
+  {
+   // Флаги: Чтение | Запись | CSV | ANSI | !! РАЗРЕШИТЬ ОБЩИЙ ДОСТУП !!
+   int handle = FileOpen(m_filename_main, FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE, ";");
    
-   // Если спред больше разрешенного
-   if(spread_points > m_max_spread)
+   if(handle != INVALID_HANDLE)
      {
-      // 1. Сообщаем Логгеру: "Запиши это в файл!"
-      if(CheckPointer(m_logger) != POINTER_INVALID)
-         m_logger.LogSpread(spread_points, m_max_spread);
+      // Переходим в конец файла
+      FileSeek(handle, 0, SEEK_END);
       
-      return false; // Торговать нельзя
+      // Если файл пустой (начало), пишем заголовок
+      if(FileSize(handle) == 0)
+        {
+         FileWrite(handle, "Time", "Symbol", "Type", "Message");
+        }
+      
+      string type = is_error ? "ERROR" : "INFO";
+      FileWrite(handle, TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS), m_symbol, type, message);
+      FileClose(handle);
      }
-   return true; // Всё ок
-  }
-
-bool CRiskControl::CheckTime(bool &is_close_time, int close_h, int close_m)
-  {
-   datetime now = TimeCurrent();
-   MqlDateTime dt;
-   TimeToStruct(now, dt);
-
-   if(dt.hour == close_h && dt.min >= close_m)
+   else
      {
-      is_close_time = true;
-      return false;
+      Print("CRITICAL ERROR: Cannot open log file! Error code: ", GetLastError());
      }
-   if(dt.hour > close_h)
-     {
-      is_close_time = true;
-      return false;
-     }
-
-   is_close_time = false;
-
-   if(dt.hour < m_start_hour || dt.hour >= m_end_hour)
-      return false;
-
-   return true;
   }
 
-bool CRiskControl::CheckDayOpen(ENUM_TIMEFRAMES timeframe)
+//+------------------------------------------------------------------+
+//| Spread Log Function                                              |
+//+------------------------------------------------------------------+
+void CLogger::LogSpread(double spread, double threshold)
   {
-   if(!m_check_day_open) return true;
-   double open_price = iOpen(NULL, PERIOD_D1, 0);
-   double current_price = m_symbol.Bid();
-   if(current_price < open_price) return false;
-   return true;
+   // Тот же набор флагов с FILE_SHARE_READ
+   int handle = FileOpen(m_filename_spread, FILE_READ|FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_SHARE_READ|FILE_SHARE_WRITE, ";");
+   
+   if(handle != INVALID_HANDLE)
+     {
+      FileSeek(handle, 0, SEEK_END);
+      
+      if(FileSize(handle) == 0)
+        {
+         FileWrite(handle, "Time", "Symbol", "Spread", "Threshold", "Comment");
+        }
+      
+      string comment = "High Spread Detected";
+      FileWrite(handle, TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS), m_symbol, DoubleToString(spread, 1), DoubleToString(threshold, 1), comment);
+      FileClose(handle);
+     }
   }
+//+------------------------------------------------------------------+
