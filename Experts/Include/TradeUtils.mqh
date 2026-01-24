@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                                   TradeUtils.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                                            VERSION 1.0 (MODULAR) |
+//|                                       VERSION 4.5 (SCREENSHOTS)  |
 //+------------------------------------------------------------------+
 #property strict
 #include <Trade\Trade.mqh>
@@ -11,9 +11,9 @@
 class CTradeUtils
   {
 private:
-   CTrade           *m_trade;        // Указатель на CTrade (из Engine)
-   CSymbolInfo      *m_symbol;       // Указатель на символ
-   CLogger          *m_logger;       // Указатель на логгер
+   CTrade           *m_trade;
+   CSymbolInfo      *m_symbol;
+   CLogger          *m_logger;
    int               m_magic;
 
 public:
@@ -22,13 +22,9 @@ public:
 
    void              Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logger_ptr, int magic);
 
-   // Операции
    bool              OpenBuy(double volume, string comment);
    void              CloseAllPositions();
-   
-   // Расчеты
    double            CalculateSeriesProfit();
-   int               CountTrades();
   };
 
 CTradeUtils::CTradeUtils(void) { }
@@ -42,16 +38,13 @@ void CTradeUtils::Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logg
    m_magic = magic;
   }
 
+// --- ЗДЕСЬ ЖИВУТ СДЕЛКИ И СКРИНШОТЫ ---
 bool CTradeUtils::OpenBuy(double volume, string comment)
   {
    if(CheckPointer(m_symbol) == POINTER_INVALID) return false;
    m_symbol.RefreshRates();
    
    double ask = m_symbol.Ask();
-   double bid = m_symbol.Bid(); // Для SL
-   
-   // Простой расчет стопов (можно усложнить позже)
-   // Для стратегии сетки пока берем просто вход, стопы контролирует Engine или виртуально
    double sl = 0; 
    double tp = 0;
 
@@ -59,13 +52,16 @@ bool CTradeUtils::OpenBuy(double volume, string comment)
    
    if(res)
      {
-      // Формируем красивую строку для лога (ИСПРАВЛЕНИЕ ОШИБКИ 387)
       string log_msg = StringFormat("ORDER OPEN: BUY Vol: %.2f Price: %.5f", volume, ask);
       if(CheckPointer(m_logger) != POINTER_INVALID)
          m_logger.Log(log_msg);
       
-      // Скриншот
-      ChartScreenShot(0, "TradeMonster_Shot_" + IntegerToString((long)TimeCurrent()) + ".png", 1920, 1080);
+      // --- ВОТ ОНА, ФУНКЦИЯ СКРИНШОТА ---
+      string filename = "TradeMonster_Shot_" + IntegerToString((long)TimeCurrent()) + ".png";
+      ChartScreenShot(0, filename, 1920, 1080);
+      
+      if(CheckPointer(m_logger) != POINTER_INVALID)
+         m_logger.Log("Screenshot saved: " + filename);
      }
    else
      {
