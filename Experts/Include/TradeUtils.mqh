@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                                   TradeUtils.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                                     VERSION 5.3 (ADD SELL)       |
+//|                             VERSION 6.5 (SCREENSHOT DEBUG)       |
 //+------------------------------------------------------------------+
 #property strict
 
@@ -16,18 +16,13 @@ private:
    CSymbolInfo      *m_symbol;
    CLogger          *m_logger;
    int               m_magic;
-
 public:
                      CTradeUtils();
-                    ~CTradeUtils();
+                     ~CTradeUtils();
 
    void              Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logger_ptr, int magic);
-
-   // Открытие позиций
    bool              OpenBuy(double lot, double sl, double tp, string comment);
-   bool              OpenSell(double lot, double sl, double tp, string comment); // <--- ДОБАВЛЕНО
-   
-   // Закрытие
+   bool              OpenSell(double lot, double sl, double tp, string comment);
    void              CloseAllPositions();
   };
 
@@ -42,7 +37,7 @@ void CTradeUtils::Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logg
    m_magic = magic;
   }
 
-// --- BUY ---
+// --- OPEN BUY (С ПРОВЕРКОЙ СКРИНШОТА) ---
 bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
   {
    if(m_trade == NULL || m_symbol == NULL) return false;
@@ -50,24 +45,64 @@ bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
    
    if(m_trade.Buy(lot, m_symbol.Name(), price, sl, tp, comment))
      {
-      if(m_logger != NULL) m_logger.Log("BUY OPEN. Lot: " + DoubleToString(lot, 2) + " | " + comment);
-      ChartScreenShot(0, "Shot_BUY_"+IntegerToString((long)TimeCurrent())+".png", 1920, 1080);
+      ulong ticket = m_trade.ResultDeal(); 
+      if(ticket == 0) ticket = m_trade.ResultOrder(); 
+
+      // 1. Лог в файл
+      if(m_logger != NULL) 
+         m_logger.Log("OPEN BUY | TICKET: " + IntegerToString(ticket) + " | " + comment);
+         
+      // 2. Скриншот с отчетом в журнал
+      string name = "Shot_BUY_" + IntegerToString((long)TimeCurrent()) + ".png";
+      
+      // Принудительно обновляем график перед снимком
+      ChartRedraw(0);
+      
+      if(ChartScreenShot(0, name, 1920, 1080))
+        {
+         Print(">> SCREENSHOT SAVED: " + name); // <--- ИЩИТЕ ЭТО В ЖУРНАЛЕ
+        }
+      else
+        {
+         // Если ошибка - выводим код
+         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError()); 
+        }
+      
       return true;
      }
    if(m_logger != NULL) m_logger.Log("Order Buy Error: " + IntegerToString(GetLastError()), true);
    return false;
   }
 
-// --- SELL ---
+// --- OPEN SELL (С ПРОВЕРКОЙ СКРИНШОТА) ---
 bool CTradeUtils::OpenSell(double lot, double sl, double tp, string comment)
   {
    if(m_trade == NULL || m_symbol == NULL) return false;
-   double price = m_symbol.Bid(); // Продаем по Bid
+   double price = m_symbol.Bid(); 
    
    if(m_trade.Sell(lot, m_symbol.Name(), price, sl, tp, comment))
      {
-      if(m_logger != NULL) m_logger.Log("SELL OPEN. Lot: " + DoubleToString(lot, 2) + " | " + comment);
-      ChartScreenShot(0, "Shot_SELL_"+IntegerToString((long)TimeCurrent())+".png", 1920, 1080);
+      ulong ticket = m_trade.ResultDeal();
+      if(ticket == 0) ticket = m_trade.ResultOrder();
+
+      // 1. Лог в файл
+      if(m_logger != NULL) 
+         m_logger.Log("OPEN SELL | TICKET: " + IntegerToString(ticket) + " | " + comment);
+         
+      // 2. Скриншот с отчетом в журнал
+      string name = "Shot_SELL_" + IntegerToString((long)TimeCurrent()) + ".png";
+      
+      ChartRedraw(0);
+
+      if(ChartScreenShot(0, name, 1920, 1080))
+        {
+         Print(">> SCREENSHOT SAVED: " + name); // <--- ИЩИТЕ ЭТО В ЖУРНАЛЕ
+        }
+      else
+        {
+         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError());
+        }
+
       return true;
      }
    if(m_logger != NULL) m_logger.Log("Order Sell Error: " + IntegerToString(GetLastError()), true);
