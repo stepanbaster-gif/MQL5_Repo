@@ -1,0 +1,2 @@
+Time;Ticket;PosID;Event;Symbol;Type;Volume;Price;SL;TP;Profit;Swap;Comm;Balance;Series_PnL;Comment
+2026.01.20 22:00:26;1145927276;1214237223;DEAL_OPEN;EURUSD;BUY;0.02;1.17125;1.17075;1.17425;0.00;0.00;0.00;288.46;0.36;Step: 3
