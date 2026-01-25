@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                                   TradeUtils.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                             VERSION 7.0 (PARTIAL CLOSE ADDED)    |
+//|                    VERSION 7.5 (COMMON FOLDER SCREENSHOTS)       |
 //+------------------------------------------------------------------+
 #property strict
 
@@ -25,8 +25,6 @@ public:
    bool              OpenBuy(double lot, double sl, double tp, string comment);
    bool              OpenSell(double lot, double sl, double tp, string comment);
    void              CloseAllPositions();
-   
-   // --- НОВОЕ: ЧАСТИЧНОЕ ЗАКРЫТИЕ ---
    bool              ClosePartial(ulong ticket, double lot_to_close);
   };
 
@@ -41,7 +39,7 @@ void CTradeUtils::Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logg
    m_magic = magic;
   }
 
-// --- OPEN BUY (С ПРОВЕРКОЙ СКРИНШОТА) ---
+// --- OPEN BUY (С СОХРАНЕНИЕМ В COMMON ПАПКУ) ---
 bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
   {
    if(m_trade == NULL || m_symbol == NULL) return false;
@@ -55,15 +53,19 @@ bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
       if(m_logger != NULL) 
          m_logger.Log("OPEN BUY | TICKET: " + IntegerToString(ticket) + " | " + comment);
 
-      string name = "Shot_BUY_" + IntegerToString((long)TimeCurrent()) + ".png";
+      // Имя файла для общей папки (начинается с '\')
+      string name = "\\Shot_BUY_" + IntegerToString((long)TimeCurrent()) + ".png";
       ChartRedraw(0);
-      if(ChartScreenShot(0, name, 1920, 1080))
+
+      // Используем флаг CHART_SCREENSHOT_COMMON (или сохранение через терминал)
+      // В MT5 для сохранения в CommonFiles имя должно начинаться с '\'
+      if(ChartScreenShot(0, name, 1920, 1080, ALIGN_RIGHT))
         {
-         Print(">> SCREENSHOT SAVED: " + name);
+         Print(">> SCREENSHOT SAVED TO COMMON: " + name);
         }
       else
         {
-         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError());
+         Print(">> SCREENSHOT FAILED! Error: ", GetLastError());
         }
       
       return true;
@@ -72,7 +74,7 @@ bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
    return false;
   }
 
-// --- OPEN SELL (С ПРОВЕРКОЙ СКРИНШОТА) ---
+// --- OPEN SELL (С СОХРАНЕНИЕМ В COMMON ПАПКУ) ---
 bool CTradeUtils::OpenSell(double lot, double sl, double tp, string comment)
   {
    if(m_trade == NULL || m_symbol == NULL) return false;
@@ -86,16 +88,16 @@ bool CTradeUtils::OpenSell(double lot, double sl, double tp, string comment)
       if(m_logger != NULL) 
          m_logger.Log("OPEN SELL | TICKET: " + IntegerToString(ticket) + " | " + comment);
 
-      string name = "Shot_SELL_" + IntegerToString((long)TimeCurrent()) + ".png";
+      string name = "\\Shot_SELL_" + IntegerToString((long)TimeCurrent()) + ".png";
       ChartRedraw(0);
 
-      if(ChartScreenShot(0, name, 1920, 1080))
+      if(ChartScreenShot(0, name, 1920, 1080, ALIGN_RIGHT))
         {
-         Print(">> SCREENSHOT SAVED: " + name);
+         Print(">> SCREENSHOT SAVED TO COMMON: " + name);
         }
       else
         {
-         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError());
+         Print(">> SCREENSHOT FAILED! Error: ", GetLastError());
         }
 
       return true;
@@ -118,7 +120,6 @@ void CTradeUtils::CloseAllPositions()
      }
   }
 
-// --- РЕАЛИЗАЦИЯ ЧАСТИЧНОГО ЗАКРЫТИЯ (НОВОЕ) ---
 bool CTradeUtils::ClosePartial(ulong ticket, double lot_to_close)
   {
    if(m_trade == NULL) return false;
@@ -127,7 +128,6 @@ bool CTradeUtils::ClosePartial(ulong ticket, double lot_to_close)
      {
       double current_lot = PositionGetDouble(POSITION_VOLUME);
       
-      // Если закрываем больше или столько же, сколько есть - закрываем всё
       if(lot_to_close >= current_lot)
         {
          if(m_trade.PositionClose(ticket))
@@ -138,7 +138,6 @@ bool CTradeUtils::ClosePartial(ulong ticket, double lot_to_close)
         }
       else
         {
-         // Частичное закрытие объема
          if(m_trade.PositionClosePartial(ticket, lot_to_close))
            {
             if(m_logger != NULL) 
