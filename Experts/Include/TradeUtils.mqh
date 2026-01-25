@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                                   TradeUtils.mqh |
 //|                                  Copyright 2026, Stepan Baster   |
-//|                             VERSION 6.5 (SCREENSHOT DEBUG)       |
+//|                             VERSION 7.0 (PARTIAL CLOSE ADDED)    |
 //+------------------------------------------------------------------+
 #property strict
 
@@ -16,14 +16,18 @@ private:
    CSymbolInfo      *m_symbol;
    CLogger          *m_logger;
    int               m_magic;
+
 public:
                      CTradeUtils();
-                     ~CTradeUtils();
+                    ~CTradeUtils();
 
    void              Init(CTrade *trade_ptr, CSymbolInfo *symbol_ptr, CLogger *logger_ptr, int magic);
    bool              OpenBuy(double lot, double sl, double tp, string comment);
    bool              OpenSell(double lot, double sl, double tp, string comment);
    void              CloseAllPositions();
+   
+   // --- НОВОЕ: ЧАСТИЧНОЕ ЗАКРЫТИЕ ---
+   bool              ClosePartial(ulong ticket, double lot_to_close);
   };
 
 CTradeUtils::CTradeUtils() : m_trade(NULL), m_symbol(NULL), m_logger(NULL), m_magic(0) {}
@@ -45,27 +49,21 @@ bool CTradeUtils::OpenBuy(double lot, double sl, double tp, string comment)
    
    if(m_trade.Buy(lot, m_symbol.Name(), price, sl, tp, comment))
      {
-      ulong ticket = m_trade.ResultDeal(); 
+      ulong ticket = m_trade.ResultDeal();
       if(ticket == 0) ticket = m_trade.ResultOrder(); 
 
-      // 1. Лог в файл
       if(m_logger != NULL) 
          m_logger.Log("OPEN BUY | TICKET: " + IntegerToString(ticket) + " | " + comment);
-         
-      // 2. Скриншот с отчетом в журнал
+
       string name = "Shot_BUY_" + IntegerToString((long)TimeCurrent()) + ".png";
-      
-      // Принудительно обновляем график перед снимком
       ChartRedraw(0);
-      
       if(ChartScreenShot(0, name, 1920, 1080))
         {
-         Print(">> SCREENSHOT SAVED: " + name); // <--- ИЩИТЕ ЭТО В ЖУРНАЛЕ
+         Print(">> SCREENSHOT SAVED: " + name);
         }
       else
         {
-         // Если ошибка - выводим код
-         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError()); 
+         Print(">> SCREENSHOT FAILED! Error Code: ", GetLastError());
         }
       
       return true;
@@ -85,18 +83,15 @@ bool CTradeUtils::OpenSell(double lot, double sl, double tp, string comment)
       ulong ticket = m_trade.ResultDeal();
       if(ticket == 0) ticket = m_trade.ResultOrder();
 
-      // 1. Лог в файл
       if(m_logger != NULL) 
          m_logger.Log("OPEN SELL | TICKET: " + IntegerToString(ticket) + " | " + comment);
-         
-      // 2. Скриншот с отчетом в журнал
+
       string name = "Shot_SELL_" + IntegerToString((long)TimeCurrent()) + ".png";
-      
       ChartRedraw(0);
 
       if(ChartScreenShot(0, name, 1920, 1080))
         {
-         Print(">> SCREENSHOT SAVED: " + name); // <--- ИЩИТЕ ЭТО В ЖУРНАЛЕ
+         Print(">> SCREENSHOT SAVED: " + name);
         }
       else
         {
@@ -121,4 +116,36 @@ void CTradeUtils::CloseAllPositions()
          if(m_logger != NULL) m_logger.Log("FORCE CLOSE -> Ticket: " + IntegerToString(ticket));
         }
      }
+  }
+
+// --- РЕАЛИЗАЦИЯ ЧАСТИЧНОГО ЗАКРЫТИЯ (НОВОЕ) ---
+bool CTradeUtils::ClosePartial(ulong ticket, double lot_to_close)
+  {
+   if(m_trade == NULL) return false;
+   
+   if(PositionSelectByTicket(ticket))
+     {
+      double current_lot = PositionGetDouble(POSITION_VOLUME);
+      
+      // Если закрываем больше или столько же, сколько есть - закрываем всё
+      if(lot_to_close >= current_lot)
+        {
+         if(m_trade.PositionClose(ticket))
+           {
+            if(m_logger != NULL) m_logger.Log("PARTIAL CLOSE (FULL) -> Ticket: " + IntegerToString(ticket));
+            return true;
+           }
+        }
+      else
+        {
+         // Частичное закрытие объема
+         if(m_trade.PositionClosePartial(ticket, lot_to_close))
+           {
+            if(m_logger != NULL) 
+               m_logger.Log("PARTIAL CLOSE -> Ticket: " + IntegerToString(ticket) + " | Closed: " + DoubleToString(lot_to_close, 2));
+            return true;
+           }
+        }
+     }
+   return false;
   }
