@@ -18,14 +18,14 @@ public:
    CRiskControl(void) : m_start_hour(0), m_end_hour(0), m_max_spread(0) { }
    ~CRiskControl(void) { }
 
-   // Инициализация [cite: 19, 25]
+   // Инициализация 
    void Init(CSymbolInfo *symbol_ptr, CLogger *logger_ptr)
      {
       m_symbol = symbol_ptr;
       m_logger = logger_ptr;
      }
 
-   // Установка параметров без DayOpen [cite: 20, 26]
+   // Установка параметров без DayOpen
    void SetParams(int start_h, int end_h, double max_spread)
      {
       m_start_hour = start_h;
@@ -33,7 +33,7 @@ public:
       m_max_spread = max_spread;
      }
 
-   // Проверка реального счета [cite: 24, 27-28]
+   // Проверка реального счета 
    bool IsRealAccount()
      {
       if(m_account.TradeMode() == ACCOUNT_TRADE_MODE_REAL)
