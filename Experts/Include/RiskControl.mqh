@@ -45,7 +45,7 @@ public:
       return false;
      }
 
-   // Проверка спреда [cite: 22, 29-32]
+   // Проверка спреда
    bool CheckSpread()
      {
       if(CheckPointer(m_symbol) == POINTER_INVALID) return false;
@@ -60,7 +60,7 @@ public:
       return true;
      }
 
-   // Проверка времени [cite: 21, 33-37]
+   // Проверка времени
    bool CheckTime(bool &is_close_time, int close_h, int close_m)
      {
       MqlDateTime dt;
