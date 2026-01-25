@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                                   NewsModule.mqh |
-//|                                  Copyright 2026, Stepan Baster   |
+//|                            Copyright 25.01.2026, Stepan Baster   |
 //|                    VERSION 2.0 (MT5 NATIVE CALENDAR)             |
 //+------------------------------------------------------------------+
 #property strict
