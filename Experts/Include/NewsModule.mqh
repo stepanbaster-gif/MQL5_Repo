@@ -4,22 +4,21 @@
 //+------------------------------------------------------------------+
 #property strict
 
-// Структура для хранения и сортировки кандидатов
 struct SNewsCandidate
 {
-   datetime time;    // Время
+   datetime time;    // Время события
    string   title;   // Название
+   string   currency;// Валюта
 };
 
 class CNewsModule
-  {
+{
 private:
    string         m_symbol;
-   string         m_curr_base;
-   string         m_curr_profit;
    bool           m_only_high;
    
-   datetime       m_last_update;
+   SNewsCandidate m_cache[]; // Кэш новостей
+   datetime       m_last_update_time; // Время последнего обновления кэша
 
 public:
    CNewsModule();
@@ -28,117 +27,128 @@ public:
    // Инициализация
    void Init(string symbol, bool only_high_importance);
    
-   // Получение текста для Дашборда (ТОП-3)
+   // Получение текста (ТОП-3), с авто-обновлением
    string GetNextNewsInfo();
    
 private:
-   // Вспомогательная функция: собирает новости в общий массив
-   void CollectNewsForCurrency(string currency, datetime start, datetime end, 
-                               SNewsCandidate &candidates[]);
-  };
+   // Принудительное обновление списка
+   void RefreshNews();
+   
+   // Сбор новостей по одной валюте
+   void CollectNewsForCurrency(string currency, datetime start, datetime end, SNewsCandidate &candidates[]);
+};
 
 CNewsModule::CNewsModule()
-  {
+{
    m_symbol = "";
    m_only_high = true;
-   m_last_update = 0;
-  }
+   m_last_update_time = 0;
+}
 
 CNewsModule::~CNewsModule()
-  {
-  }
+{
+}
 
 void CNewsModule::Init(string symbol, bool only_high_importance)
-  {
+{
    m_symbol = symbol;
    m_only_high = only_high_importance;
+   m_last_update_time = 0; // Сброс таймера, чтобы обновиться сразу
    
-   // Определяем валюты
-   m_curr_base   = SymbolInfoString(m_symbol, SYMBOL_CURRENCY_BASE);
-   m_curr_profit = SymbolInfoString(m_symbol, SYMBOL_CURRENCY_PROFIT);
-   
-   if(m_curr_base == "" && StringLen(m_symbol) == 6)
-     {
-      m_curr_base = StringSubstr(m_symbol, 0, 3);
-      m_curr_profit = StringSubstr(m_symbol, 3, 3);
-     }
-     
-   Print("NewsModule: Init for ", m_symbol, " [", m_curr_base, " - ", m_curr_profit, "]");
-  }
+   Print("NewsModule: Init for ", m_symbol, " [Auto-Refresh enabled]");
+   RefreshNews(); // Первичная загрузка
+}
 
 string CNewsModule::GetNextNewsInfo()
-  {
-   // Кэширование (чтобы не грузить терминал каждую секунду)
-   if(TimeCurrent() - m_last_update < 60 && m_last_update > 0)
-     {
-      // (Упрощенно: позволяем коду ниже отработать, это быстро)
-     }
-   m_last_update = TimeCurrent();
-   
-   datetime start = TimeCurrent();
-   datetime end   = start + 24 * 3600; // 24 часа вперед
-   
-   // Динамический массив для сбора всех подходящих новостей
-   SNewsCandidate candidates[];
-   
-   // 1. Собираем новости по Базовой валюте
-   if(m_curr_base != "")
-      CollectNewsForCurrency(m_curr_base, start, end, candidates);
-      
-   // 2. Собираем новости по Валюте Прибыли
-   if(m_curr_profit != "" && m_curr_profit != m_curr_base)
-      CollectNewsForCurrency(m_curr_profit, start, end, candidates);
-      
-   // 3. Если ничего не нашли
-   int total = ArraySize(candidates);
-   if(total == 0) return "No events (24h)";
-   
-   // 4. Сортируем по времени (ближайшие - сверху)
-   // ArraySort не работает со строками внутри структур, делаем простую сортировку пузырьком
-   for(int i = 0; i < total - 1; i++)
-     {
-      for(int j = 0; j < total - i - 1; j++)
-        {
-         if(candidates[j].time > candidates[j + 1].time)
-           {
-            // Меняем местами
-            SNewsCandidate temp = candidates[j];
-            candidates[j] = candidates[j + 1];
-            candidates[j + 1] = temp;
-           }
-        }
-     }
-   
-   // 5. Формируем строку (ТОП 3)
+{
+   // 1. ПРОВЕРКА НА ОБНОВЛЕНИЕ (Раз в 15 минут = 900 секунд)
+   if(TimeCurrent() - m_last_update_time > 900)
+   {
+      RefreshNews();
+   }
+
+   if(ArraySize(m_cache) == 0) return "No upcoming news";
+
+   // 2. Формируем строку из ТОП-3 ближайших
    string result = "";
-   int count = MathMin(total, 3); // Берем максимум 3 или сколько есть
+   int count = 0;
+   datetime now = TimeCurrent();
    
-   for(int i=0; i<count; i++)
-     {
-      long left_seconds = candidates[i].time - TimeCurrent();
+   for(int i=0; i<ArraySize(m_cache); i++)
+   {
+      // Пропускаем уже прошедшие новости (старые удалятся при следующем Refresh)
+      if(m_cache[i].time < now) continue;
+      
+      long left_seconds = m_cache[i].time - now;
       int h = (int)(left_seconds / 3600);
       int m = (int)((left_seconds % 3600) / 60);
       
       string s_time = IntegerToString(h) + "h " + IntegerToString(m) + "m";
-      if(left_seconds < 0) s_time = "NOW!";
+      if(left_seconds < 60) s_time = "NOW!";
       
-      // Формат: "2h 30m: NFP"
-      // Добавляем перенос строки \n, если это не первая новость
-      if(i > 0) result += "\n       "; 
+      // Добавляем разделитель, если это не первая строка
+      if(count > 0) result += "\n"; 
       
-      result += s_time + ": " + candidates[i].title;
-     }
-     
+      result += s_time + ": " + m_cache[i].currency + " - " + m_cache[i].title;
+      
+      count++;
+      if(count >= 3) break; // Показываем только 3 ближайших
+   }
+   
+   if(result == "") return "No upcoming news";
    return result;
-  }
+}
 
-// Внутренний метод сбора новостей
+void CNewsModule::RefreshNews()
+{
+   // Очищаем кэш
+   ArrayFree(m_cache);
+   
+   // Определяем валюты пары (например EUR и USD)
+   string base = StringSubstr(m_symbol, 0, 3);
+   string profit = StringSubstr(m_symbol, 3, 3);
+   
+   // Берем новости от СЕЙЧАС до +3 ДНЯ
+   datetime start = TimeCurrent();
+   datetime end   = start + (3 * 24 * 3600); 
+   
+   // Собираем во временный массив
+   SNewsCandidate temp_candidates[];
+   CollectNewsForCurrency(base, start, end, temp_candidates);
+   CollectNewsForCurrency(profit, start, end, temp_candidates);
+   
+   // Сортировка пузырьком (событий мало, так что быстро)
+   int total = ArraySize(temp_candidates);
+   for(int i=0; i<total-1; i++) {
+      for(int j=0; j<total-i-1; j++) {
+         if(temp_candidates[j].time > temp_candidates[j+1].time) {
+            SNewsCandidate tmp = temp_candidates[j];
+            temp_candidates[j] = temp_candidates[j+1];
+            temp_candidates[j+1] = tmp;
+         }
+      }
+   }
+   
+   // --- ИСПРАВЛЕНИЕ: Копируем вручную, так как есть string ---
+   ArrayResize(m_cache, total);
+   for(int i=0; i<total; i++)
+   {
+      m_cache[i].time     = temp_candidates[i].time;
+      m_cache[i].title    = temp_candidates[i].title;
+      m_cache[i].currency = temp_candidates[i].currency;
+   }
+   // ----------------------------------------------------------
+   
+   m_last_update_time = TimeCurrent();
+   // Print("NewsModule: Updated. Found ", total, " events.");
+}
+
 void CNewsModule::CollectNewsForCurrency(string currency, datetime start, datetime end, 
                                          SNewsCandidate &candidates[])
 {
    MqlCalendarValue values[];
    
-   // Запрашиваем календарь для конкретной валюты (NULL вместо страны, currency - валюта)
+   // Запрашиваем календарь
    if(CalendarValueHistory(values, start, end, NULL, currency))
    {
       int total_vals = ArraySize(values);
@@ -146,18 +156,19 @@ void CNewsModule::CollectNewsForCurrency(string currency, datetime start, dateti
       
       for(int i=0; i<total_vals; i++)
       {
-         // Получаем детали
+         // Получаем описание события по ID
          if(!CalendarEventById(values[i].event_id, news_item)) continue;
          
-         // Фильтр Важности (High >= 2)
-         if(m_only_high && news_item.importance < 2) continue;
+         // Фильтр Важности
+         // 0=None, 1=Low, 2=Medium, 3=High
+         if(m_only_high && news_item.importance < 3) continue;
          
-         // Если новость подходит - добавляем в массив кандидатов
+         // Добавляем в массив
          int size = ArraySize(candidates);
          ArrayResize(candidates, size + 1);
-         
          candidates[size].time  = values[i].time;
-         candidates[size].title = news_item.name;
+         candidates[size].title = news_item.name; // Или news_item.event_code если имя пустое
+         candidates[size].currency = currency;
       }
    }
 }

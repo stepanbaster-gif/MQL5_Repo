@@ -52,8 +52,6 @@ int OnCalculate(const int rates_total,
    double val_net   = GlobalVariableGet(prefix + "Net");
    double val_step  = GlobalVariableGet(prefix + "Step");
    double val_float = GlobalVariableGet(prefix + "Float");
-   
-   // ЧИТАЕМ ЗНАЧЕНИЕ ИЗ CSV (переданное через Engine)
    double val_series = GlobalVariableGet(prefix + "SeriesSum");
    
    PatternInfo p = ExtAnalyst.AnalyzePattern(_Symbol, PERIOD_CURRENT, 1);
@@ -63,10 +61,10 @@ int OnCalculate(const int rates_total,
    string s2 = ExtAnalyst.GetSizeString(p.c2.size_cat);
    string s1 = ExtAnalyst.GetSizeString(p.c1.size_cat);
    
-   color c2_color = p.c2.is_bull ? clrLime : clrRed;
+   color c2_color = p.c2.is_bull ? clrLime : clrWhite;
    if(p.c2.type == TYPE_DOJI) c2_color = clrYellow;
    
-   color c1_color = p.c1.is_bull ? clrLime : clrRed;
+   color c1_color = p.c1.is_bull ? clrLime : clrWhite;
    if(p.c1.type == TYPE_DOJI) c1_color = clrYellow;
 
    string news_obj = prefix + "NewsObj";
@@ -77,24 +75,33 @@ int OnCalculate(const int rates_total,
 
    // --- ОТРИСОВКА ---
 
-   // КОЛОНКА 1: СТАТУС (Полная статистика)
+   // ======================================================================================
+   // КОЛОНКА 1: СТАТУС
+   // Заголовок высоко (Y=5)
    UpdateLabel("TM_Label_Title", 10, 5,  "TRADE MONSTER STATUS", clrWhite, win, 12);
-   UpdateLabel("TM_Label_Net",   10, 30, "NET P/L: " + DoubleToString(val_net, 2), (val_net >= 0 ? clrLime : clrRed), win, 10);
+   
+   // Данные начинаются с Y=30
+   UpdateLabel("TM_Label_Net",   10, 30, "NET P/L: " + DoubleToString(val_net, 2), (val_net >= 0 ? clrLime : clrWhite), win, 10);
    UpdateLabel("TM_Label_Step",  10, 50, "CURRENT STEP: " + IntegerToString((int)val_step), clrWhite, win, 10);
-   UpdateLabel("TM_Label_Float", 10, 70, "CURRENT FLOAT: " + DoubleToString(val_float, 2), (val_float >= 0 ? clrLime : clrRed), win, 10);
-   
-   // ВОТ ОНО: Накопленный убыток серии
-   UpdateLabel("TM_Label_CSV",   10, 90, "SERIES (CSV): " + DoubleToString(val_series, 2), (val_series >= 0 ? clrLime : clrRed), win, 10);
+   UpdateLabel("TM_Label_Float", 10, 70, "CURRENT FLOAT: " + DoubleToString(val_float, 2), (val_float >= 0 ? clrLime : clrWhite), win, 10);
+   UpdateLabel("TM_Label_CSV",   10, 90, "SERIES (CSV): " + DoubleToString(val_series, 2), (val_series >= 0 ? clrLime : clrWhite), win, 10);
 
+   // ======================================================================================
    // КОЛОНКА 2: СВЕЧИ
-   UpdateLabel("TM_Label_C_Head", 220, 5, "CANDLE ANALYSIS (2 BARS)", clrGray, win, 8);
-   UpdateLabel("TM_Label_C2",     220, 25, "PREV (2): " + t2 + " [" + s2 + "]", c2_color, win, 10);
-   UpdateLabel("TM_Label_C1",     220, 45, "SIGNAL(1): " + t1 + " [" + s1 + "]", c1_color, win, 10);
-   UpdateLabel("TM_Label_Patt",   220, 70, "Combo: " + p.description, clrGray, win, 8);
-
-   // КОЛОНКА 3: НОВОСТИ
-   UpdateLabel("TM_Label_N_Head", 480, 5, "UPCOMING EVENTS", clrCyan, win, 8);
+   // Заголовок ОПУЩЕН до Y=30 (вровень с NET P/L)
+   UpdateLabel("TM_Label_C_Head", 220, 30, "CANDLE ANALYSIS (2 BARS)", clrWhite, win, 10);
    
+   // Данные сдвинуты ниже
+   UpdateLabel("TM_Label_C2",     220, 50, "PREV (2): " + t2 + " [" + s2 + "]", c2_color, win, 10);
+   UpdateLabel("TM_Label_C1",     220, 70, "SIGNAL(1): " + t1 + " [" + s1 + "]", c1_color, win, 10);
+   UpdateLabel("TM_Label_Patt",   220, 90, "Combo: " + p.description, clrWhite, win, 8);
+
+   // ======================================================================================
+   // КОЛОНКА 3: НОВОСТИ
+   // Заголовок ОПУЩЕН до Y=30 (вровень с NET P/L)
+   UpdateLabel("TM_Label_N_Head", 480, 30, "UPCOMING EVENTS", clrWhite, win, 10);
+   
+   // Данные сдвинуты ниже
    string line1 = "-", line2 = "-", line3 = "-";
    int idx1 = StringFind(news_text, "\n");
    
@@ -112,9 +119,9 @@ int OnCalculate(const int rates_total,
       }
    }
    
-   UpdateLabel("TM_Label_N1", 480, 25, line1, clrLightBlue, win, 8);
-   UpdateLabel("TM_Label_N2", 480, 40, line2, clrLightBlue, win, 8);
-   UpdateLabel("TM_Label_N3", 480, 55, line3, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_N1", 480, 50, line1, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_N2", 480, 65, line2, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_N3", 480, 80, line3, clrLightBlue, win, 8);
 
    ChartRedraw(0);
    return(rates_total);
