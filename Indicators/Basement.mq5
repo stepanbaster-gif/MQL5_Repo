@@ -4,36 +4,22 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Stepan Baster"
 #property indicator_separate_window
-#property indicator_height 130
+#property indicator_height 120
 #property indicator_buffers 1 
 #property indicator_plots   1
 #property indicator_type1   DRAW_NONE 
-
-// Подключаем аналитика, чтобы знать имена свечей
-#include "Include/CandlePatterns.mqh" 
 
 input int InpMagic    = 777; 
 input int InpFontSize = 10;
 input color InpColor  = clrWhite;
 
-// Настройки размеров для аналитика (должны совпадать с Engine)
-input int InpSizeMicroLimit   = 5;   
-input int InpSizeSmallLimit   = 20;  
-input int InpSizeNormLimit    = 40;  
-input int InpSizeLargeLimit   = 60; 
-
 double EmptyBuffer[];
-CCandleAnalyst ExtAnalyst;
 
 //+------------------------------------------------------------------+
 int OnInit()
   {
    IndicatorSetString(INDICATOR_SHORTNAME, "TM_Basement");
    SetIndexBuffer(0, EmptyBuffer, INDICATOR_DATA);
-   
-   // Инициализируем аналитика
-   ExtAnalyst.Init(InpSizeMicroLimit, InpSizeSmallLimit, InpSizeNormLimit, InpSizeLargeLimit);
-   
    return(INIT_SUCCEEDED);
   }
 
@@ -41,7 +27,6 @@ int OnInit()
 void OnDeinit(const int reason)
   {
    ObjectsDeleteAll(0, "TM_Label_");
-   ChartRedraw(0);
   }
 
 //+------------------------------------------------------------------+
@@ -53,77 +38,67 @@ int OnCalculate(const int rates_total,
    int win = ChartWindowFind();
    if(win < 0) win = (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL) - 1;
 
-   // 1. ПОЛУЧАЕМ ДАННЫЕ ОТ ENGINE (Global Variables)
    string prefix = "TM_" + IntegerToString(InpMagic) + "_";
+
+   // 1. Читаем данные из Глобальных Переменных (связь с Engine)
    double val_net   = GlobalVariableGet(prefix + "Net");
    double val_step  = GlobalVariableGet(prefix + "Step");
+   double val_type  = GlobalVariableGet(prefix + "CandleType");
    
-   // 2. АНАЛИЗИРУЕМ СВЕЧИ (Сами, чтобы знать имена обеих)
-   PatternInfo p = ExtAnalyst.AnalyzePattern(_Symbol, PERIOD_CURRENT, 1);
-   
-   // Формируем цвета и названия для C2 (Пред) и C1 (Сигнал)
-   string t2 = ExtAnalyst.GetTypeString(p.c2.type);
-   string t1 = ExtAnalyst.GetTypeString(p.c1.type);
-   string s2 = ExtAnalyst.GetSizeString(p.c2.size_cat);
-   string s1 = ExtAnalyst.GetSizeString(p.c1.size_cat);
-   
-   color c2_color = p.c2.is_bull ? clrLime : clrRed;
-   if(p.c2.type == TYPE_DOJI) c2_color = clrYellow;
-   
-   color c1_color = p.c1.is_bull ? clrLime : clrRed;
-   if(p.c1.type == TYPE_DOJI) c1_color = clrYellow;
-
-   // 3. ПОЛУЧАЕМ НОВОСТИ (Из объекта)
+   // 2. Читаем Новости (из скрытого объекта, который создает Engine)
    string news_obj = prefix + "NewsObj";
-   string news_text = "NO NEWS DATA";
+   string news_text = "WAITING FOR NEWS DATA...";
    if(ObjectFind(0, news_obj) >= 0) {
       news_text = ObjectGetString(0, news_obj, OBJPROP_TEXT);
    }
 
-   // --- ОТРИСОВКА (ТРИ КОЛОНКИ) ---
+   // 3. Расшифровка типа свечи
+   string p_text = "ANALYZING...";
+   color p_color = clrGray;
+   int c_type = (int)val_type;
 
-   // КОЛОНКА 1: СТАТУС (Слева)
+   if(c_type == 1)      { p_text = "FULL BULL (Strong)"; p_color = clrLime; }
+   else if(c_type == 2) { p_text = "FULL BEAR (Strong)"; p_color = clrRed; }
+   else if(c_type == 3) { p_text = "NORMAL BULL"; p_color = clrSpringGreen; }
+   else if(c_type == 4) { p_text = "NORMAL BEAR"; p_color = clrTomato; }
+   else if(c_type == 5) { p_text = "PIN BAR (Bullish)"; p_color = clrAqua; }
+   else if(c_type == 6) { p_text = "PIN BAR (Bearish)"; p_color = clrMagenta; }
+   else if(c_type == 7) { p_text = "DOJI (Indecision)"; p_color = clrYellow; }
+   
+   // 4. Отрисовка Текста (Левая колонка - Статус)
    UpdateLabel("TM_Label_Title", 10, 5,  "TRADE MONSTER STATUS", clrWhite, win, 12);
    UpdateLabel("TM_Label_Net",   10, 30, "NET P/L: " + DoubleToString(val_net, 2), (val_net >= 0 ? clrLime : clrRed), win, 10);
    UpdateLabel("TM_Label_Step",  10, 50, "CURRENT STEP: " + IntegerToString((int)val_step), clrWhite, win, 10);
-
-   // КОЛОНКА 2: СВЕЧИ (Посередине - ТЕПЕРЬ ДВЕ СТРОКИ)
-   UpdateLabel("TM_Label_C_Head", 220, 5, "CANDLE ANALYSIS (2 BARS)", clrGray, win, 8);
    
-   // Свеча 2 (Вчера)
-   UpdateLabel("TM_Label_C2",     220, 25, "PREV (2): " + t2 + " [" + s2 + "]", c2_color, win, 10);
-   // Свеча 1 (Сигнал)
-   UpdateLabel("TM_Label_C1",     220, 45, "SIGNAL(1): " + t1 + " [" + s1 + "]", c1_color, win, 10);
+   // 5. Центральная колонка - Паттерн
+   UpdateLabel("TM_Label_P_Title", 250, 5,  "LAST CANDLE PATTERN", clrGray, win, 8);
+   UpdateLabel("TM_Label_Pattern", 250, 25, p_text, p_color, win, 12);
    
-   // Общее описание паттерна (мелко снизу)
-   UpdateLabel("TM_Label_Patt",   220, 70, "Combo: " + p.description, clrGray, win, 8);
-
-   // КОЛОНКА 3: НОВОСТИ (Справа - 3 строчки)
-   UpdateLabel("TM_Label_N_Head", 480, 5, "UPCOMING EVENTS", clrCyan, win, 8);
+   // 6. Правая колонка - Новости (Мультистрочный текст)
+   UpdateLabel("TM_Label_N_Title", 500, 5, "UPCOMING NEWS", clrCyan, win, 8);
    
-   // Разбиваем текст новостей на 3 строки по символу переноса "\n"
-   string line1 = "-", line2 = "-", line3 = "-";
-   int idx1 = StringFind(news_text, "\n");
+   // Разбиваем новости на строки, если они склеены
+   string line1 = news_text;
+   string line2 = "";
+   string line3 = "";
    
-   if(idx1 < 0) {
-      line1 = news_text; // Всего одна новость
-   } else {
-      line1 = StringSubstr(news_text, 0, idx1);
-      string rest = StringSubstr(news_text, idx1 + 1);
-      int idx2 = StringFind(rest, "\n");
-      if(idx2 < 0) {
-         line2 = rest; // Две новости
+   int n1 = StringFind(news_text, "\n");
+   if(n1 > 0) {
+      line1 = StringSubstr(news_text, 0, n1);
+      string rest = StringSubstr(news_text, n1 + 1);
+      int n2 = StringFind(rest, "\n");
+      if(n2 > 0) {
+         line2 = StringSubstr(rest, 0, n2);
+         line3 = StringSubstr(rest, n2 + 1);
       } else {
-         line2 = StringSubstr(rest, 0, idx2);
-         line3 = StringSubstr(rest, idx2 + 1); // Три новости
+         line2 = rest;
       }
    }
    
-   UpdateLabel("TM_Label_N1", 480, 25, line1, clrLightBlue, win, 8);
-   UpdateLabel("TM_Label_N2", 480, 40, line2, clrLightBlue, win, 8);
-   UpdateLabel("TM_Label_N3", 480, 55, line3, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_News1", 500, 25, line1, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_News2", 500, 40, line2, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_News3", 500, 55, line3, clrLightBlue, win, 8);
 
-   ChartRedraw(0);
    return(rates_total);
   }
 
