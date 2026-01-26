@@ -4,128 +4,115 @@
 //+------------------------------------------------------------------+
 #property copyright   "Copyright 2026, Stepan Baster"
 #property indicator_separate_window
-#property indicator_height 180
+#property indicator_height 120
+#property indicator_buffers 1 
 #property indicator_plots   1
 #property indicator_type1   DRAW_NONE 
 
-#include "Include/CandlePatterns.mqh" 
-
 input int InpMagic    = 777; 
-// Лимиты размеров (должны совпадать с советником)
-input int InpSizeMicroLimit   = 5;   
-input int InpSizeSmallLimit   = 20;  
-input int InpSizeNormLimit    = 40;  
-input int InpSizeLargeLimit   = 60;  
+input int InpFontSize = 10;
+input color InpColor  = clrWhite;
 
 double EmptyBuffer[];
-CCandleAnalyst ExtAnalyst;
 
+//+------------------------------------------------------------------+
 int OnInit()
-{
+  {
    IndicatorSetString(INDICATOR_SHORTNAME, "TM_Basement");
    SetIndexBuffer(0, EmptyBuffer, INDICATOR_DATA);
-   ExtAnalyst.Init(InpSizeMicroLimit, InpSizeSmallLimit, InpSizeNormLimit, InpSizeLargeLimit);
    return(INIT_SUCCEEDED);
-}
+  }
 
+//+------------------------------------------------------------------+
 void OnDeinit(const int reason)
-{
-   ObjectsDeleteAll(0, "TM_B_"); // Удаляем все объекты подвала
-}
+  {
+   ObjectsDeleteAll(0, "TM_Label_");
+  }
 
-int OnCalculate(const int rates_total, const int prev_calculated, const int begin, const double &price[])
-{
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const int begin,
+                const double &price[])
+  {
    int win = ChartWindowFind();
-   if(win < 0) return(rates_total);
+   if(win < 0) win = (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL) - 1;
 
-   // Очищаем и рисуем заново
-   ObjectsDeleteAll(win, "TM_B_Draw_"); 
+   string prefix = "TM_" + IntegerToString(InpMagic) + "_";
 
-   // Рисуем заголовок
-   DrawText(win, "TM_B_Title", 10, 5, "MULTI-TIMEFRAME PATTERN MONITOR", clrWhite, 10);
+   // 1. Читаем данные из Глобальных Переменных (связь с Engine)
+   double val_net   = GlobalVariableGet(prefix + "Net");
+   double val_step  = GlobalVariableGet(prefix + "Step");
+   double val_type  = GlobalVariableGet(prefix + "CandleType");
+   
+   // 2. Читаем Новости (из скрытого объекта, который создает Engine)
+   string news_obj = prefix + "NewsObj";
+   string news_text = "WAITING FOR NEWS DATA...";
+   if(ObjectFind(0, news_obj) >= 0) {
+      news_text = ObjectGetString(0, news_obj, OBJPROP_TEXT);
+   }
 
-   // --- ZONE 1: M1 ---
-   ProcessTimeframe(win, _Symbol, PERIOD_M1, 10, 30, "M1");
+   // 3. Расшифровка типа свечи
+   string p_text = "ANALYZING...";
+   color p_color = clrGray;
+   int c_type = (int)val_type;
 
-   // --- ZONE 2: M5 ---
-   ProcessTimeframe(win, _Symbol, PERIOD_M5, 250, 30, "M5");
-
-   // --- ZONE 3: M15 ---
-   ProcessTimeframe(win, _Symbol, PERIOD_M15, 490, 30, "M15");
+   if(c_type == 1)      { p_text = "FULL BULL (Strong)"; p_color = clrLime; }
+   else if(c_type == 2) { p_text = "FULL BEAR (Strong)"; p_color = clrRed; }
+   else if(c_type == 3) { p_text = "NORMAL BULL"; p_color = clrSpringGreen; }
+   else if(c_type == 4) { p_text = "NORMAL BEAR"; p_color = clrTomato; }
+   else if(c_type == 5) { p_text = "PIN BAR (Bullish)"; p_color = clrAqua; }
+   else if(c_type == 6) { p_text = "PIN BAR (Bearish)"; p_color = clrMagenta; }
+   else if(c_type == 7) { p_text = "DOJI (Indecision)"; p_color = clrYellow; }
+   
+   // 4. Отрисовка Текста (Левая колонка - Статус)
+   UpdateLabel("TM_Label_Title", 10, 5,  "TRADE MONSTER STATUS", clrWhite, win, 12);
+   UpdateLabel("TM_Label_Net",   10, 30, "NET P/L: " + DoubleToString(val_net, 2), (val_net >= 0 ? clrLime : clrRed), win, 10);
+   UpdateLabel("TM_Label_Step",  10, 50, "CURRENT STEP: " + IntegerToString((int)val_step), clrWhite, win, 10);
+   
+   // 5. Центральная колонка - Паттерн
+   UpdateLabel("TM_Label_P_Title", 250, 5,  "LAST CANDLE PATTERN", clrGray, win, 8);
+   UpdateLabel("TM_Label_Pattern", 250, 25, p_text, p_color, win, 12);
+   
+   // 6. Правая колонка - Новости (Мультистрочный текст)
+   UpdateLabel("TM_Label_N_Title", 500, 5, "UPCOMING NEWS", clrCyan, win, 8);
+   
+   // Разбиваем новости на строки, если они склеены
+   string line1 = news_text;
+   string line2 = "";
+   string line3 = "";
+   
+   int n1 = StringFind(news_text, "\n");
+   if(n1 > 0) {
+      line1 = StringSubstr(news_text, 0, n1);
+      string rest = StringSubstr(news_text, n1 + 1);
+      int n2 = StringFind(rest, "\n");
+      if(n2 > 0) {
+         line2 = StringSubstr(rest, 0, n2);
+         line3 = StringSubstr(rest, n2 + 1);
+      } else {
+         line2 = rest;
+      }
+   }
+   
+   UpdateLabel("TM_Label_News1", 500, 25, line1, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_News2", 500, 40, line2, clrLightBlue, win, 8);
+   UpdateLabel("TM_Label_News3", 500, 55, line3, clrLightBlue, win, 8);
 
    return(rates_total);
-}
+  }
 
-// Функция обработки одного ТФ
-void ProcessTimeframe(int win, string sym, ENUM_TIMEFRAMES tf, int x_offset, int y_offset, string tf_name)
+void UpdateLabel(string name, int x, int y, string text, color clr, int window, int size)
 {
-   PatternInfo p = ExtAnalyst.AnalyzePattern(sym, tf, 1);
+   if(ObjectFind(0, name) < 0) {
+      ObjectCreate(0, name, OBJ_LABEL, window, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false); 
+   }
    
-   // Заголовок ТФ
-   DrawText(win, "TM_B_H_"+tf_name, x_offset + 80, y_offset, tf_name, clrYellow, 12);
-   
-   // Описание паттерна
-   DrawText(win, "TM_B_D_"+tf_name, x_offset + 10, y_offset + 100, p.description, clrWhite, 8);
-   
-   // Рисуем свечу 2 (Prev)
-   DrawCandleParams(win, "TM_B_Draw_"+tf_name+"_C2", x_offset + 50, y_offset + 50, p.c2);
-   
-   // Рисуем свечу 1 (Signal)
-   DrawCandleParams(win, "TM_B_Draw_"+tf_name+"_C1", x_offset + 120, y_offset + 50, p.c1);
-   
-   // Подписи размеров
-   DrawText(win, "TM_B_S_"+tf_name+"_C2", x_offset + 50, y_offset + 85, ExtAnalyst.GetSizeString(p.c2.size_cat), clrGray, 7);
-   DrawText(win, "TM_B_S_"+tf_name+"_C1", x_offset + 120, y_offset + 85, ExtAnalyst.GetSizeString(p.c1.size_cat), clrGray, 7);
-}
-
-void DrawCandleParams(int win, string name, int x, int y, CandleInfo &ci)
-{
-   color cColor = ci.is_bull ? clrLime : clrRed;
-   if(ci.type == TYPE_DOJI) cColor = clrYellow;
-   
-   // Высота зависит от размера
-   int h_total = 20;
-   if(ci.size_cat == SIZE_SMALL) h_total = 35;
-   if(ci.size_cat == SIZE_NORMAL) h_total = 50;
-   if(ci.size_cat == SIZE_LARGE) h_total = 65;
-   if(ci.size_cat == SIZE_EXTRA) h_total = 80;
-   
-   int w_body = 16;
-   
-   // Пропорции тела (визуально)
-   int h_body = (int)(h_total * (ci.body_pct / 100.0));
-   if(h_body < 2) h_body = 2; // Минимум
-   
-   // 1. Фитиль (Линия)
-   string obj_wick = name + "_W";
-   ObjectCreate(0, obj_wick, OBJ_RECTANGLE_LABEL, win, 0, 0);
-   ObjectSetInteger(0, obj_wick, OBJPROP_XDISTANCE, x + (w_body/2) - 1);
-   ObjectSetInteger(0, obj_wick, OBJPROP_YDISTANCE, y - (h_total/2));
-   ObjectSetInteger(0, obj_wick, OBJPROP_XSIZE, 2);
-   ObjectSetInteger(0, obj_wick, OBJPROP_YSIZE, h_total);
-   ObjectSetInteger(0, obj_wick, OBJPROP_BGCOLOR, cColor);
-   ObjectSetInteger(0, obj_wick, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   
-   // 2. Тело
-   string obj_body = name + "_B";
-   ObjectCreate(0, obj_body, OBJ_RECTANGLE_LABEL, win, 0, 0);
-   ObjectSetInteger(0, obj_body, OBJPROP_XDISTANCE, x);
-   // Центрируем тело по вертикали относительно фитиля (схематично)
-   ObjectSetInteger(0, obj_body, OBJPROP_YDISTANCE, y - (h_body/2)); 
-   ObjectSetInteger(0, obj_body, OBJPROP_XSIZE, w_body);
-   ObjectSetInteger(0, obj_body, OBJPROP_YSIZE, h_body);
-   ObjectSetInteger(0, obj_body, OBJPROP_BGCOLOR, cColor);
-   ObjectSetInteger(0, obj_body, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-   ObjectSetInteger(0, obj_body, OBJPROP_BORDER_TYPE, BORDER_FLAT);
-}
-
-void DrawText(int win, string name, int x, int y, string text, color clr, int size)
-{
-   if(ObjectFind(0, name) < 0) ObjectCreate(0, name, OBJ_LABEL, win, 0, 0);
    ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
-   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
 }
